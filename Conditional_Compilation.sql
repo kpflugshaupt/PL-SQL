@@ -21,7 +21,7 @@ end test_pkg;
 alter package test_pkg compile PLSQL_CCFLAGS = 'testing:false' reuse settings;
 
 begin 
-   test_pkg.proc1; --> exception
+   test_pkg.proc1; --> exception is thrown
 end;
 
 begin
@@ -35,7 +35,7 @@ end;  --> Processed source in DBMS Output
 alter package test_pkg compile PLSQL_CCFLAGS = 'testing:true' reuse settings;
 
 begin 
-   test_pkg.proc1; --> OK
+   test_pkg.proc1; --> OK, no exception
 end;
 
 begin
