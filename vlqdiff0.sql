@@ -226,6 +226,7 @@ CREATE OR REPLACE package V0LDATI2.VLQDIFF0 as
 end vlqdiff0;
 /
 
+
 CREATE OR REPLACE package body V0LDATI2.vlqdiff0 as
 
    --------------------------------------------------------------------------------
@@ -404,7 +405,6 @@ CREATE OR REPLACE package body V0LDATI2.vlqdiff0 as
       end create_table;
    begin
       time_log('Initialising tables');
-      
       -- create working tables
       create_table('vl_snapshot',
                    'timestp date, set_name varchar2(1000), tag varchar2(100), nr number');
@@ -1142,7 +1142,7 @@ CREATE OR REPLACE package body V0LDATI2.vlqdiff0 as
             execute immediate l_stmt;
          exception
             when others then
-               time_log('Could not create table '||l_bkup_table_name);
+               time_log('Could not create table '||l_bkup_table_name||' using statement: '||l_stmt);
          end;
          --
          l_table_name := g_table_key_tab.next(l_table_name);
