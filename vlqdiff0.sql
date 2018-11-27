@@ -404,6 +404,7 @@ CREATE OR REPLACE package body V0LDATI2.vlqdiff0 as
       end create_table;
    begin
       time_log('Initialising tables');
+      
       -- create working tables
       create_table('vl_snapshot',
                    'timestp date, set_name varchar2(1000), tag varchar2(100), nr number');
