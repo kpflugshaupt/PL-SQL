@@ -1,4 +1,43 @@
-CREATE OR REPLACE package V0LDATI2.VLQDIFF0 as
+/**
+ * -----------------------------------------------------------------------------
+ * HEADER : Copyright (c) finnova AG Bankware
+ * PROJECT: VL
+ * PACKAGE: vlqdiff0
+ *
+ *
+ * $Source: /home/cvsadmin/cvs-root/f2/sql/vl/vlqdiff0.sql,v $
+ * $Id: vlqdiff0.sql,v 1.11 2018/06/14 14:58:18 kap Exp $
+ * $Revision: 1.11 $
+ * $Author: kap $
+ *
+ * Description:
+ * Snapshots and diffs on table sets
+ *
+ * -----------------------------------------------------------------------------
+ * $Log: vlqdiff0.sql,v $
+ * Revision 1.11  2018/06/14 14:58:18  kap
+ * VLQDIFF0 generalisation
+ *
+ * Revision 1.10  2018/06/13 14:21:00  kap
+ * SonarQube fixes
+ *
+ * Revision 1.8  2018/05/31 14:12:56  kap
+ * VLQDIFF0 generalisation
+ *
+ * Revision 1.7  2018/05/30 09:44:04  kap
+ * Tabelle VL_KURS_AKT zugefügt
+ *
+ * Revision 1.6  2018/03/07 10:16:26  kap
+ * Sonarqube fixes (3)
+ *
+ *
+ * -----------------------------------------------------------------------------
+ */
+
+--------------------------------------------------------------------------------
+-- PACKAGE SPECIFICATION
+--------------------------------------------------------------------------------
+create or replace package VLQDIFF0 as
 
    -----------------------------------------------------------------------------
    -- PUBLIC TYPES
@@ -133,9 +172,15 @@ CREATE OR REPLACE package V0LDATI2.VLQDIFF0 as
 
    /**
       Defines a named set of tables to work with
-      Set needs to be passed separated by commas
+      Set tables need to be passed separated by commas
    */
    procedure def_table_set(PI_table_set_name varchar2, PI_table_set varchar2);
+
+   /**
+      Initialises a previously defined named set of tables to work with
+      Set needs to be passed separated by commas
+   */
+   procedure init_table_set(PI_table_set_name varchar2);
 
    /**
       Define index column(s) to be used for a table in a table set
@@ -227,7 +272,11 @@ end vlqdiff0;
 /
 
 
-CREATE OR REPLACE package body V0LDATI2.vlqdiff0 as
+--------------------------------------------------------------------------------
+-- PACKAGE BODY
+--------------------------------------------------------------------------------
+
+create or replace package body vlqdiff0 as
 
    --------------------------------------------------------------------------------
    -- TYPES
@@ -863,10 +912,20 @@ CREATE OR REPLACE package body V0LDATI2.vlqdiff0 as
       l_table_name      t_table_name;
       l_bkup_table_name t_table_name;
       l_stmt            clob;
+      l_table_set       varchar2(1000);
    begin
       time_log('---- START RESTORE SNAPSHOT '||PI_tag||'----');
+      l_table_set := coalesce(g_current_table_set, 'VDF');
+      if g_current_table_set is null or l_table_set != g_current_table_set then
+         init_table_set(l_table_set);
+      end if;
       l_table_name := g_table_key_tab.first;
       while l_table_name is not null loop
+         if g_table_excp_list.exists(l_table_name) then
+            time_log('Table '||l_table_name||' on exception list, not restoring');
+            l_table_name := g_table_key_tab.next(l_table_name);
+            continue;
+         end if;
          l_bkup_table_name := l_table_name || '__' || PI_tag;
          table_disable_triggers(l_table_name);
          time_log('truncate table '||l_table_name);
@@ -900,6 +959,11 @@ CREATE OR REPLACE package body V0LDATI2.vlqdiff0 as
       time_log('---- START TRUNCATING TABLES ----');
       l_table_name := g_table_key_tab.first;
       while l_table_name is not null loop
+         if g_table_excp_list.exists(l_table_name) then
+            time_log('Table '||l_table_name||' on exception list, not truncated');
+            l_table_name := g_table_key_tab.next(l_table_name);
+            continue;
+         end if;
          time_log('truncate table '||l_table_name);
          execute immediate 'truncate table '||l_table_name;
          --
@@ -1087,6 +1151,7 @@ CREATE OR REPLACE package body V0LDATI2.vlqdiff0 as
       ora_drop('view',  'vl_diff_ov');
       ora_drop('table', 'vl_diff');
       ora_drop('table', 'vl_table_set');
+      ora_drop('table', 'vl_diff_log');
 
       -- clean up memory state
       g_current_table_set := null;
@@ -1142,7 +1207,7 @@ CREATE OR REPLACE package body V0LDATI2.vlqdiff0 as
             execute immediate l_stmt;
          exception
             when others then
-               time_log('Could not create table '||l_bkup_table_name||' using statement: '||l_stmt);
+               time_log('Could not create table '||l_bkup_table_name, 'Generated statement: '||l_stmt);
          end;
          --
          l_table_name := g_table_key_tab.next(l_table_name);
@@ -1157,6 +1222,7 @@ CREATE OR REPLACE package body V0LDATI2.vlqdiff0 as
       time_log('---- END SNAPSHOT '||PI_tag||' of table set '||l_table_set||' ----');
    exception
       when others then
+         time_log('Error creating snapshot', 'Generated statement: '||l_stmt);
          ALQMSG00.Msg_Error('snapshot', sqlerrm, $$PLSQL_UNIT); raise;
    end snapshot;
 
@@ -1195,7 +1261,11 @@ CREATE OR REPLACE package body V0LDATI2.vlqdiff0 as
 
 
    --------------------------------------------------------------------------------
-   function table_columns(PI_table_name t_table_name, PI_quote boolean := false, PI_map boolean := true)
+   function table_columns(
+      PI_table_name  t_table_name
+     ,PI_quote       boolean := false
+     ,PI_map         boolean := true
+   )
    return clob
    is
       l_columns      clob;
@@ -1621,6 +1691,7 @@ CREATE OR REPLACE package body V0LDATI2.vlqdiff0 as
       execute immediate l_stmt;
    exception
       when others then
+         time_log('Error building LNR maps', 'Last generated statement: '||l_stmt);
          ALQMSG00.Msg_Error('build_lnr_maps', sqlerrm, $$PLSQL_UNIT); raise;
    end build_lnr_maps;
 
@@ -1800,7 +1871,7 @@ CREATE OR REPLACE package body V0LDATI2.vlqdiff0 as
       time_log('---- END DIFF '||PI_tag1||' vs. '||PI_tag2||' ----');
    exception
       when others then
-         time_log('Error in Diff calc, generated code in CTX', l_stmt);
+         time_log('Error in Diff calc, last generated code in CTX', l_stmt);
          ALQMSG00.Msg_Error('calc_diff(1)', sqlerrm, $$PLSQL_UNIT); raise;
    end calc_diff;
 
