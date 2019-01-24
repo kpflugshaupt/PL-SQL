@@ -1,15 +1,13 @@
 --------------------------------------------------------------------------------
+-- TYPES
+--------------------------------------------------------------------------------
+create or replace type t_text_list as table of varchar2(400);
+/
+
+--------------------------------------------------------------------------------
 -- PACKAGE SPECIFICATION
 --------------------------------------------------------------------------------
 create or replace package apg_diff as
-
-   -----------------------------------------------------------------------------
-   -- PUBLIC TYPES
-   -----------------------------------------------------------------------------
-   subtype t_lnr_key is varchar2(70);
-   subtype t_lnr     is varchar2(30);
-   type    t_lnr_map is table of t_lnr_key index by t_lnr;
-
 
    -----------------------------------------------------------------------------
    -- PUBLIC ROUTINES
@@ -99,7 +97,6 @@ create or replace package body apg_diff as
    -- TYPES
    --------------------------------------------------------------------------------
    subtype t_table_name      is varchar2(4000);
-   type    t_table_list      is table of t_table_name;
    type    t_table_excp_list is table of boolean index by t_table_name;
    subtype t_column_name     is varchar2(4000);
 
@@ -109,7 +106,7 @@ create or replace package body apg_diff as
    --------------------------------------------------------------------------------
    -- GLOBAL DATA
    --------------------------------------------------------------------------------
-   g_table_list        t_table_list := t_table_list();
+   g_table_list        t_text_list := t_text_list();
    g_table_excp_list   t_table_excp_list;
    g_current_table_set varchar2(100);
    g_table_key_tab     t_table_key_tab;
@@ -145,9 +142,9 @@ create or replace package body apg_diff as
 
    --------------------------------------------------------------------------------
    function str_split(pi_str varchar2, pi_delim varchar2 := ',')
-   return SRCVARCHAR2_TABLE_SQL
+   return t_text_list
    is
-      l_str_list SRCVARCHAR2_TABLE_SQL  := SRCVARCHAR2_TABLE_SQL();
+      l_str_list t_text_list  := t_text_list();
       l_pos      pls_integer := 1;
       l_found    pls_integer := 0;
       l_new_idx  pls_integer;
@@ -175,7 +172,7 @@ create or replace package body apg_diff as
 
 
    --------------------------------------------------------------------------------
-   function str_join(pi_str_list SRCVARCHAR2_TABLE_SQL, pi_delim varchar2 := ',')
+   function str_join(pi_str_list t_text_list, pi_delim varchar2 := ',')
       return varchar2
    is
       l_str varchar2(4000);
@@ -191,7 +188,7 @@ create or replace package body apg_diff as
    --------------------------------------------------------------------------------
    procedure def_table_set(PI_table_set_name varchar2, PI_table_set varchar2)
    is
-      l_table_tab    SRCVARCHAR2_TABLE_SQL;
+      l_table_tab    t_text_list;
    begin
       execute immediate '
          delete from diff_table_set where set_name = :tset
@@ -700,7 +697,7 @@ create or replace package body apg_diff as
       l_quote        varchar2(2) := case when PI_quote then q'{'}' else null end;
       l_is_vdf       boolean := case when g_current_table_set = 'VDF' then true else false end;
       l_idx_cols     varchar2(4000);
-      l_idx_col_list SRCVARCHAR2_TABLE_SQL;
+      l_idx_col_list t_text_list;
    begin
       -- Get index column override, if set
       execute immediate '
@@ -748,7 +745,7 @@ create or replace package body apg_diff as
       l_expr         varchar2(1000);
       c              sys_refcursor;
       l_idx_cols     varchar2(4000);
-      l_idx_col_list SRCVARCHAR2_TABLE_SQL := SRCVARCHAR2_TABLE_SQL();
+      l_idx_col_list t_text_list := t_text_list();
    begin
       -- Get index column override, if set
       execute immediate '
@@ -918,13 +915,13 @@ create or replace package body apg_diff as
                      when 'M' then
                         case c.version
                            when 'old' then}'||chr(13);
-         for i in l_table_columns.first .. l_table_columns.last loop
-            l_field := l_table_columns(i);
+         for i in l_table_nomap_cols.first .. l_table_nomap_cols.last loop
+            l_field := l_table_nomap_cols(i);
             l_stmt  := l_stmt || q'{                              l_fld_diff_tab('}'||l_field||q'{').old_val := to_char(c.}'||l_field||q'{);}'||chr(13);
          end loop;
          l_stmt := l_stmt || q'{                           when 'new' then}'||chr(13);
-         for i in l_table_columns.first .. l_table_columns.last loop
-            l_field := l_table_columns(i);
+         for i in l_table_nomap_cols.first .. l_table_nomap_cols.last loop
+            l_field := l_table_nomap_cols(i);
             l_stmt  := l_stmt || q'{                              l_fld_diff_tab('}'||l_field||q'{').new_val := to_char(c.}'||l_field||q'{);}'||chr(13);
          end loop;
          l_stmt := l_stmt || q'{                              --
